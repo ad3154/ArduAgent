@@ -38,10 +38,10 @@ int hrUpTime[]      = {1,3,6,1,2,1,25,1,1,0};
 // .iso.org.dod.internet.private.enterprises.arduino (.1.3.6.1.4.1.36582)
 //
 // RFC1213 local values
-static char locDescr[]              = "Property of Farnsworth Downs Technology";// read-only (static)
+static char locDescr[]              = "This is a description";// read-only (static)
 static uint32_t locUpTime           = 0;                                        // read-only (static)
-static char locContact[20]          = "Adrian Del Grosso";                     
-static char locName[20]             = "atmelAgent";                              
+static char locContact[20]          = "Adrian";                     
+static char locName[20]             = "arduAgent";                              
 static char locLocation[20]         = "USA";                         
 static int32_t locServices          = 6;      // read-only (static)
 

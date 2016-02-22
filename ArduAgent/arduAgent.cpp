@@ -57,6 +57,7 @@ void arduAgentClass::listen(void)
 
 SNMP_API_STAT_CODES arduAgentClass::begin(char *getCommName, char *setCommName, uint16_t port)
 {
+	/* THIS FUNCTION NEEDS TO BE REDONE*/
 	// set community name set/get sizes
 	_setSize = strlen(setCommName);
 	_getSize = strlen(getCommName);
@@ -84,7 +85,7 @@ void arduAgentClass::onPduReceive(onPduReceiveCallback pduReceived)
 	_callback = pduReceived;
 }
 
-SNMP_API_STAT_CODES arduAgentClass::requestPdu(SNMP_PDU *pdu)
+SNMP_API_STAT_CODES arduAgentClass::requestPdu()
 {
 	_packetSize = Udp.available();
 	// reset packet array
@@ -109,13 +110,7 @@ SNMP_API_STAT_CODES arduAgentClass::requestPdu(SNMP_PDU *pdu)
 	{
 		return SNMP_API_STAT_PACKET_INVALID;
 	}
-	//for (int i = 0; i< _packetSize; i++)
-	//{
-		//Serial.print(_packet[i], HEX);
-		//Serial.print(" ");
-	//}
-	
-	
+
 	/* We have a pdu structure that was passed in.
 	We'll now populate that structure from
 	data we received in the buffer*/
@@ -170,23 +165,45 @@ SNMP_API_STAT_CODES arduAgentClass::requestPdu(SNMP_PDU *pdu)
 	int slsb = (respondValue >> (8*1)) & 0xff;
 	int smsb = (respondValue >> (8*2)) & 0xff;
 	int msb = (respondValue >> (8*3)) & 0xff;
+	int baseResponseAddress = 7+lengthCommunityName+16+oidLength+requestIDlength;
 	int total_len = 8+lengthCommunityName+16+oidLength+requestIDlength+5;
 	_packet[7+lengthCommunityName] = 0xa2;
-	_packet[7+lengthCommunityName+16+oidLength+requestIDlength] = 0x02;
-	_packet[7+lengthCommunityName+16+oidLength+requestIDlength+1] = 0x04;
-	_packet[7+lengthCommunityName+16+oidLength+requestIDlength+2] = (uint8_t) msb;
-	_packet[7+lengthCommunityName+16+oidLength+requestIDlength+3] = (uint8_t) smsb;
-	_packet[7+lengthCommunityName+16+oidLength+requestIDlength+4] = (uint8_t) slsb;
-	_packet[7+lengthCommunityName+16+oidLength+requestIDlength+5] = (uint8_t) lsb;
+	_packet[baseResponseAddress] = 0x02;
+	_packet[baseResponseAddress+1] = 0x04;
+	_packet[baseResponseAddress+2] = (uint8_t) msb;
+	_packet[baseResponseAddress+3] = (uint8_t) smsb;
+	_packet[baseResponseAddress+4] = (uint8_t) slsb;
+	_packet[baseResponseAddress+5] = (uint8_t) lsb;
 	_packet[1] = total_len-2;
 	_packet[7+lengthCommunityName+1] = _packet[7+lengthCommunityName+1]+4;
 	_packet[7+lengthCommunityName+11+requestIDlength] = 10+oidLength;
 	_packet[7+lengthCommunityName+13+requestIDlength] = 8+oidLength;
 }
 
-void arduAgentClass::generate_errorPDU(void){
+
+void arduAgentClass::generate_errorPDU(SNMP_ERR_CODES CODE){
+	int errorCodeLocation = 7+lengthCommunityName+6+requestIDlength;
+	if (CODE==SNMP_ERR_TOO_BIG)
+	{
+		_packet[errorCodeLocation] = 0x01;
+	}
+	else if(CODE==SNMP_ERR_NO_SUCH_NAME)
+	{
+		_packet[errorCodeLocation] = 0x02;
+	}
+	else if (CODE==SNMP_ERR_BAD_VALUE)
+	{
+		_packet[errorCodeLocation] = 0x03;
+	}
+	else if (CODE==SNMP_ERR_READ_ONLY)
+	{
+		_packet[errorCodeLocation] = 0x04;
+	}
+	else if (CODE==SNMP_ERR_GEN_ERROR)
+	{
+		_packet[errorCodeLocation] = 0x05;
+	}
 	_packet[7+lengthCommunityName] = 0xa2;
-	_packet[7+lengthCommunityName+6+requestIDlength] = 102;
 	Udp.beginPacket(Udp.remoteIP(), Udp.remotePort());
 	Udp.write(_packet, _packet[1]+2);
 	Udp.endPacket();
@@ -205,7 +222,8 @@ int arduAgentClass::getOIDlength(void)
 	return oidLength;
 }
 
-bool arduAgentClass::check_oid(const int inputoid[]){
+bool arduAgentClass::check_oid(const int inputoid[])
+{
 	for(int i = 2; i < oidLength; i++)
 	{
 		if(inputoid[i] != oid[i-1])
@@ -216,14 +234,14 @@ bool arduAgentClass::check_oid(const int inputoid[]){
 	return true;
 }
 
-bool arduAgentClass::send_response(void){
+SNMP_API_STAT_CODES arduAgentClass::send_response(void){
 	if(!Udp.beginPacket(Udp.remoteIP(), Udp.remotePort()))
 	{
-		return false;
+		return SNMP_API_STAT_PACKET_INVALID;
 	}
 	Udp.write(_packet, _packet[1]+2);
 	Udp.endPacket();
-	return true;
+	return SNMP_API_STAT_SUCCESS;
 }
 
 void arduAgentClass::print_packet(void){

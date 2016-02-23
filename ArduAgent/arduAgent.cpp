@@ -23,8 +23,7 @@
 
 EthernetUDP Udp;
 
-SNMP_API_STAT_CODES arduAgentClass::begin()
-{
+SNMP_API_STAT_CODES arduAgentClass::begin(){
 	// set community names
 	_getCommName = "public";
 	_setCommName = "private";
@@ -39,8 +38,7 @@ SNMP_API_STAT_CODES arduAgentClass::begin()
 	return SNMP_API_STAT_SUCCESS;
 }
 
-void arduAgentClass::listen(void)
-{
+void arduAgentClass::listen(void){
 	// if bytes are available in receive buffer
 	// and pointer to a function (delegate function)
 	// isn't null, trigger the function
@@ -55,8 +53,7 @@ void arduAgentClass::listen(void)
 }
 
 
-SNMP_API_STAT_CODES arduAgentClass::begin(char *getCommName, char *setCommName, uint16_t port)
-{
+SNMP_API_STAT_CODES arduAgentClass::begin(char *getCommName, char *setCommName, uint16_t port){
 	/* THIS FUNCTION NEEDS TO BE REDONE*/
 	// set community name set/get sizes
 	_setSize = strlen(setCommName);
@@ -80,13 +77,11 @@ SNMP_API_STAT_CODES arduAgentClass::begin(char *getCommName, char *setCommName, 
 	return SNMP_API_STAT_SUCCESS;
 }
 
-void arduAgentClass::onPduReceive(onPduReceiveCallback pduReceived)
-{
+void arduAgentClass::onPduReceive(onPduReceiveCallback pduReceived){
 	_callback = pduReceived;
 }
 
-SNMP_API_STAT_CODES arduAgentClass::requestPdu()
-{
+SNMP_API_STAT_CODES arduAgentClass::requestPdu(){
 	_packetSize = Udp.available();
 	// reset packet array
 	for (int rstCounter=0; rstCounter < SNMP_MAX_PACKET_LEN; rstCounter++)
@@ -209,21 +204,18 @@ void arduAgentClass::generate_errorPDU(SNMP_ERR_CODES CODE){
 	Udp.endPacket();
 }
 
-void arduAgentClass::getOID(byte input[])
-{
+void arduAgentClass::getOID(byte input[]){
 	for (int i = 0; i < (int)oidLength; i++)
 	{
 		input[i] = oid[i];
 	}
 }
 
-int arduAgentClass::getOIDlength(void)
-{
+int arduAgentClass::getOIDlength(void){
 	return oidLength;
 }
 
-bool arduAgentClass::check_oid(const int inputoid[])
-{
+bool arduAgentClass::check_oid(const int inputoid[]){
 	for(int i = 2; i < oidLength; i++)
 	{
 		if(inputoid[i] != oid[i-1])
@@ -251,6 +243,49 @@ void arduAgentClass::print_packet(void){
           Serial.print(" ");
         }
 	
+}
+	
+SNMP_ERR_CODES arduAgentClass::authenticateGetCommunity(void){
+
+	for (unsigned short int i=0;i<lengthCommunityName;i++)
+	{
+		if (communityName[i]!=_getCommName[i])
+		{
+			// If SNMPv2c Request
+			if(_packet[4]==1)
+			{		
+			return SNMP_ERR_AUTHORIZATION_ERROR;
+			}
+			// Otherwise, return SNMPv1 Error
+			else
+			return SNMP_ERR_NO_SUCH_NAME;
+		}
+	}
+	return SNMP_ERR_NO_ERROR;
+}
+
+SNMP_ERR_CODES arduAgentClass::authenticateSetCommunity(void){
+
+	for (unsigned short int i=0;i<lengthCommunityName;i++)
+	{
+		if (communityName[i]!=_setCommName[i])
+		{
+			// If SNMPv2c Request
+			if(_packet[4]==1)
+			{
+				return SNMP_ERR_AUTHORIZATION_ERROR;
+			}
+			// Otherwise, return SNMPv1 Error
+			else
+			return SNMP_ERR_NO_SUCH_NAME;
+		}
+	}
+	return SNMP_ERR_NO_ERROR;
+}
+
+//Need to finish
+SNMP_API_STAT_CODES snmpv2Interpreter(){
+	return SNMP_API_STAT_SUCCESS;
 }
 	
 // Create one global object

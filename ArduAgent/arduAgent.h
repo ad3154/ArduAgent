@@ -23,9 +23,9 @@
 
 #define SNMP_DEFAULT_PORT	161
 #define SNMP_MIN_OID_LEN	2
-#define SNMP_MAX_OID_LEN	64 // 128
+#define SNMP_MAX_OID_LEN	64
 #define SNMP_MAX_NAME_LEN	20
-#define SNMP_MAX_VALUE_LEN      64  // 128 ??? should limit this
+#define SNMP_MAX_VALUE_LEN      64
 #define SNMP_MAX_PACKET_LEN     SNMP_MAX_VALUE_LEN + SNMP_MAX_OID_LEN + 25  //???
 #define SNMP_FREE(s)   do { if (s) { free((void *)s); s=NULL; } } while(0)
 
@@ -76,17 +76,17 @@ typedef enum SNMP_ERR_CODES {
 	SNMP_ERR_READ_ONLY 	  		= 4,
 	SNMP_ERR_GEN_ERROR 	  		= 5,
 
-	SNMP_ERR_NO_ACCESS	  		= 6,
+	SNMP_ERR_NO_ACCESS	  			= 6,
 	SNMP_ERR_WRONG_TYPE   			= 7,
 	SNMP_ERR_WRONG_LENGTH 			= 8,
 	SNMP_ERR_WRONG_ENCODING			= 9,
 	SNMP_ERR_WRONG_VALUE			= 10,
 	SNMP_ERR_NO_CREATION			= 11,
-	SNMP_ERR_INCONSISTANT_VALUE 		= 12,
-	SNMP_ERR_RESOURCE_UNAVAILABLE		= 13,
+	SNMP_ERR_INCONSISTANT_VALUE 	= 12,
+	SNMP_ERR_RESOURCE_UNAVAILABLE	= 13,
 	SNMP_ERR_COMMIT_FAILED			= 14,
 	SNMP_ERR_UNDO_FAILED			= 15,
-	SNMP_ERR_AUTHORIZATION_ERROR		= 16,
+	SNMP_ERR_AUTHORIZATION_ERROR	= 16,
 	SNMP_ERR_NOT_WRITABLE			= 17,
 	SNMP_ERR_INCONSISTEN_NAME		= 18
 };
@@ -101,6 +101,7 @@ public:
 	SNMP_API_STAT_CODES responsePdu();
 	void onPduReceive(onPduReceiveCallback pduReceived);
 	void createResponsePDU(int respondValue);
+	SNMP_API_STAT_CODES snmpv2Interpreter();
 	
 	// Helper functions
 	bool check_oid( const int inputoid[]);
@@ -109,6 +110,8 @@ public:
 	SNMP_API_STAT_CODES send_response(void);
 	void print_packet(void);
 	void generate_errorPDU(SNMP_ERR_CODES CODE);
+	SNMP_ERR_CODES authenticateGetCommunity(void);
+	SNMP_ERR_CODES authenticateSetCommunity(void);
 
 private:
 	byte _packet[SNMP_MAX_PACKET_LEN];

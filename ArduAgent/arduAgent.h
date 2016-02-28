@@ -112,6 +112,7 @@ public:
 	void generate_errorPDU(SNMP_ERR_CODES CODE);
 	SNMP_ERR_CODES authenticateGetCommunity(void);
 	SNMP_ERR_CODES authenticateSetCommunity(void);
+	SNMP_ERR_CODES generalAuthenticator(void);
 
 private:
 	byte _packet[SNMP_MAX_PACKET_LEN];

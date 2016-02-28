@@ -82,6 +82,7 @@ void arduAgentClass::onPduReceive(onPduReceiveCallback pduReceived){
 }
 
 SNMP_API_STAT_CODES arduAgentClass::requestPdu(){
+	SNMP_ERR_CODES authenticated = SNMP_ERR_NO_ERROR;
 	_packetSize = Udp.available();
 	// reset packet array
 	for (int rstCounter=0; rstCounter < SNMP_MAX_PACKET_LEN; rstCounter++)
@@ -151,8 +152,13 @@ SNMP_API_STAT_CODES arduAgentClass::requestPdu(){
 
 	nulValue[0] = 0x05;
 	nulValue[1] = 0x00;
-		
-	return SNMP_API_STAT_SUCCESS;
+	authenticated = generalAuthenticator();
+	if(authenticated == SNMP_ERR_NO_ERROR)
+	{
+		return SNMP_API_STAT_SUCCESS;
+	}
+	else 
+		return SNMP_API_STAT_PACKET_INVALID;
 }
 
 	void arduAgentClass::createResponsePDU(int respondValue){
@@ -244,7 +250,19 @@ void arduAgentClass::print_packet(void){
         }
 	
 }
+
+SNMP_ERR_CODES arduAgentClass::generalAuthenticator(void){
+	SNMP_ERR_CODES authd = SNMP_ERR_NO_ERROR;
+	if (request[0] == 0xa0)
+	{
+		authd = authenticateGetCommunity();
+	}
+	else
+	authd = authenticateSetCommunity();
 	
+	return authd;
+}
+
 SNMP_ERR_CODES arduAgentClass::authenticateGetCommunity(void){
 
 	for (unsigned short int i=0;i<lengthCommunityName;i++)

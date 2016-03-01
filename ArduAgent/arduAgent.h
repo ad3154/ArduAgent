@@ -27,7 +27,6 @@
 #define SNMP_MAX_NAME_LEN	20
 #define SNMP_MAX_VALUE_LEN      64
 #define SNMP_MAX_PACKET_LEN     SNMP_MAX_VALUE_LEN + SNMP_MAX_OID_LEN + 25  //???
-#define SNMP_FREE(s)   do { if (s) { free((void *)s); s=NULL; } } while(0)
 
 #include "Arduino.h"
 #include "Udp.h"
@@ -101,15 +100,16 @@ public:
 	SNMP_API_STAT_CODES responsePdu();
 	void onPduReceive(onPduReceiveCallback pduReceived);
 	void createResponsePDU(int respondValue);
+	void createResponsePDU(char respondValue[]);
 	SNMP_API_STAT_CODES snmpv2Interpreter();
 	
 	// Helper functions
-	bool check_oid( const int inputoid[]);
+	bool checkOID( const int inputoid[]);
 	void getOID(byte input[]);
 	int getOIDlength(void);
 	SNMP_API_STAT_CODES send_response(void);
 	void print_packet(void);
-	void generate_errorPDU(SNMP_ERR_CODES CODE);
+	void generateErrorPDU(SNMP_ERR_CODES CODE);
 	SNMP_ERR_CODES authenticateGetCommunity(void);
 	SNMP_ERR_CODES authenticateSetCommunity(void);
 	SNMP_ERR_CODES generalAuthenticator(void);

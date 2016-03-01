@@ -21,8 +21,27 @@
 #include "arduAgent.h"
 #include "EthernetUdp.h"
 
+// Create UDP object
 EthernetUDP Udp;
 
+/**************************************************************************//**
+ * Function: begin(without parameters)
+ *
+ * Description:
+ * This is the default setup for the arduAgent Class. It makes the agent
+ * use the default values of "public" and "private" for community names
+ * and port 161 for communication. If the user wants to use different
+ * values, he/she should call the other version of this function that
+ * takes 3 parameters.
+ * 
+ *
+ * Parameters: 
+ * None
+ *
+ * Returns:
+ *  SNMP_API_STAT_CODES SNMP_API_STAT_SUCCESS - Agent started
+ *
+ *****************************************************************************/
 SNMP_API_STAT_CODES arduAgentClass::begin(){
 	// set community names
 	_getCommName = "public";
@@ -38,21 +57,54 @@ SNMP_API_STAT_CODES arduAgentClass::begin(){
 	return SNMP_API_STAT_SUCCESS;
 }
 
+/**************************************************************************//**
+ * Function: listen
+ *
+ * Description:
+ * This is the function that runs every so often within the user's main program
+ * to check to see if a PDU is available. If a packet is available, we jump
+ * to our requestPdu function.
+ * 
+ *
+ * Parameters: 
+ * None
+ *
+ * Returns:
+ *  None
+ *
+ *****************************************************************************/
 void arduAgentClass::listen(void){
 	// if bytes are available in receive buffer
 	// and pointer to a function (delegate function)
 	// isn't null, trigger the function
 	
-	/*A note here from Adrian... This was confusing to me at first
-	so here's a quick explanation. If the callback variable is set,
+	/*If the callback variable is set,
 	we actually go to the memory location of the function
 	pduReceived and begin to run there. Its like a super
-	ghetto goto by interrupt. Sorta. Makes me cringe.*/
+	ghetto goto.*/
 	Udp.parsePacket();
 	if ( Udp.available() && _callback != NULL ) (*_callback)();
 }
 
-
+/**************************************************************************//**
+ * Function: begin(with parameters)
+ *
+ * Description:
+ * This is the non-default setup for the arduAgent Class. It allows users
+ * to modify the community names and port number the agent uses.
+ * 
+ *
+ * Parameters: 
+ * char *getCommName - The C string for the GET community
+ * char *setCommName - The C string for the SET community
+ * uint16_t port	 - Port number up to 65535
+ *
+ * Returns:
+ *  SNMP_API_STAT_CODES SNMP_API_STAT_SUCCESS - Agent started
+ *  SNMP_API_STAT_CODES SNMP_API_STAT_NAME_TOO_BIG - community name exceeds
+ *		the maximum allowed in arduAgent.h
+ *
+ *****************************************************************************/
 SNMP_API_STAT_CODES arduAgentClass::begin(char *getCommName, char *setCommName, uint16_t port){
 	/* THIS FUNCTION NEEDS TO BE REDONE*/
 	// set community name set/get sizes
@@ -77,12 +129,50 @@ SNMP_API_STAT_CODES arduAgentClass::begin(char *getCommName, char *setCommName, 
 	return SNMP_API_STAT_SUCCESS;
 }
 
+/**************************************************************************//**
+ * Function: onPduReceive
+ *
+ * Description:
+ * This function is how we jump back to the user's program after parsing
+ * a received SNMP packet. We jump to the user's handler function
+ * called onPduReceive. Consequently, their function MUST always
+ * be named onPduReceive.
+ * 
+ *
+ * Parameters: 
+ * onPduReceiveCallback pduReceived
+ *
+ * Returns:
+ *  None
+ *
+ *****************************************************************************/
 void arduAgentClass::onPduReceive(onPduReceiveCallback pduReceived){
 	_callback = pduReceived;
 }
 
+/**************************************************************************//**
+ * Function: requestPDU
+ *
+ * Description:
+ * This function does the real heavy lifting. It parses the entire SNMP
+ * portion of a received packet into private data. It also performs several
+ * error checks and authentication checks on the received packet.
+ * 
+ *
+ * Parameters: 
+ * None
+ *
+ * Returns:
+ *  SNMP_API_STAT_CODES SNMP_API_STAT_SUCCESS - No errors - Packet parsed
+ *  SNMP_API_STAT_CODES SNMP_ERR_TOO_BIG - Packet exceeds maximum packet size
+ *		defined in arduAgent.h
+ *	SNMP_API_STAT_CODES SNMP_API_STAT_PACKET_INVALID - Not an SNMP packet or
+ *		client not authenticated
+ *
+ *****************************************************************************/
 SNMP_API_STAT_CODES arduAgentClass::requestPdu(){
 	SNMP_ERR_CODES authenticated = SNMP_ERR_NO_ERROR;
+	int errorStatusCodeBaseAddress;
 	_packetSize = Udp.available();
 	// reset packet array
 	for (int rstCounter=0; rstCounter < SNMP_MAX_PACKET_LEN; rstCounter++)
@@ -92,6 +182,7 @@ SNMP_API_STAT_CODES arduAgentClass::requestPdu(){
 	
 	//Validate Packet Size
 	if ( _packetSize != 0 && _packetSize > SNMP_MAX_PACKET_LEN ) {
+		arduAgent.generateErrorPDU(SNMP_ERR_TOO_BIG);
 		return SNMP_API_STAT_PACKET_TOO_BIG;
 	}
 	
@@ -133,18 +224,19 @@ SNMP_API_STAT_CODES arduAgentClass::requestPdu(){
 			requestID[i]=_packet[7+lengthCommunityName+5+i-2];
 		}
 	}
-	errorStatusCode[0] = _packet[7+lengthCommunityName+4+requestIDlength];
-	errorStatusCode[1] = _packet[7+lengthCommunityName+5+requestIDlength];
-	errorStatusCode[2] = _packet[7+lengthCommunityName+6+requestIDlength];
-	snmpIndex[0] = _packet[7+lengthCommunityName+7+requestIDlength];
-	snmpIndex[1] = _packet[7+lengthCommunityName+8+requestIDlength];
-	snmpIndex[2] = _packet[7+lengthCommunityName+9+requestIDlength];
-	varbindList[0] = _packet[7+lengthCommunityName+10+requestIDlength];
-	varbindList[1] = _packet[7+lengthCommunityName+11+requestIDlength];
-	varbind[0] = _packet[7+lengthCommunityName+12+requestIDlength];
-	varbind[1] = _packet[7+lengthCommunityName+13+requestIDlength];
-	objectID = _packet[7+lengthCommunityName+14+requestIDlength];
-	oidLength = _packet[7+lengthCommunityName+15+requestIDlength];
+	errorStatusCodeBaseAddress = 7+lengthCommunityName+4+requestIDlength;
+	errorStatusCode[0] = _packet[errorStatusCodeBaseAddress++];
+	errorStatusCode[1] = _packet[errorStatusCodeBaseAddress++];
+	errorStatusCode[2] = _packet[errorStatusCodeBaseAddress++];
+	snmpIndex[0] = _packet[errorStatusCodeBaseAddress++];
+	snmpIndex[1] = _packet[errorStatusCodeBaseAddress++];
+	snmpIndex[2] = _packet[errorStatusCodeBaseAddress++];
+	varbindList[0] = _packet[errorStatusCodeBaseAddress++];
+	varbindList[1] = _packet[errorStatusCodeBaseAddress++];
+	varbind[0] = _packet[errorStatusCodeBaseAddress++];
+	varbind[1] = _packet[errorStatusCodeBaseAddress++];
+	objectID = _packet[errorStatusCodeBaseAddress++];
+	oidLength = _packet[errorStatusCodeBaseAddress];
 	for(int i=0; i < (int) oidLength; i++)
 	{
 		oid[i] = _packet[7+lengthCommunityName+16+i+requestIDlength];
@@ -156,11 +248,28 @@ SNMP_API_STAT_CODES arduAgentClass::requestPdu(){
 	if(authenticated == SNMP_ERR_NO_ERROR)
 	{
 		return SNMP_API_STAT_SUCCESS;
-	}
-	else 
+	} 
+		arduAgent.generateErrorPDU(authenticated);	
 		return SNMP_API_STAT_PACKET_INVALID;
 }
 
+/**************************************************************************//**
+ * Function: createResponsePDU (Integer)
+ *
+ * Description:
+ * This function constructs an SNMP response packet specifically for the
+ * SNMP data type "integer" and takes an integer as a parameter.
+ * In other words, the int passed into this function will
+ * be transmitted to the client in a GET response.
+ * 
+ *
+ * Parameters: 
+ * int respondValue - The integer the user wants to send to the client.
+ *
+ * Returns:
+ *  None
+ *
+ *****************************************************************************/
 	void arduAgentClass::createResponsePDU(int respondValue){
 	int lsb = (respondValue >> (8*0)) & 0xff;
 	int slsb = (respondValue >> (8*1)) & 0xff;
@@ -179,10 +288,62 @@ SNMP_API_STAT_CODES arduAgentClass::requestPdu(){
 	_packet[7+lengthCommunityName+1] = _packet[7+lengthCommunityName+1]+4;
 	_packet[7+lengthCommunityName+11+requestIDlength] = 10+oidLength;
 	_packet[7+lengthCommunityName+13+requestIDlength] = 8+oidLength;
+	arduAgent.send_response();
 }
 
+/**************************************************************************//**
+ * Function: createResponsePDU (C string)
+ *
+ * Description:
+ * This function constructs an SNMP response packet specifically for the
+ * SNMP data type "octet string" and takes a C string as a parameter.
+ * In other words, the C string passed into this function will
+ * be transmitted to the client in a GET response.
+ * 
+ *
+ * Parameters: 
+ * char respondValue[] - The C string the user wants to send to the client.
+ *
+ * Returns:
+ *  None
+ *
+ *****************************************************************************/
+void arduAgentClass::createResponsePDU(char respondValue[]){
+		int baseResponseAddress = 7+lengthCommunityName+16+oidLength+requestIDlength;
+		int stringLength = strlen(respondValue);
+		int total_len = 8+lengthCommunityName+16+oidLength+requestIDlength+1;
+		_packet[7+lengthCommunityName] = 0xa2;
+		_packet[baseResponseAddress] = 0x04;
+		_packet[baseResponseAddress+1] = stringLength;
+		for (int i=0; i<stringLength;i++)
+		{
+			total_len++;
+			_packet[baseResponseAddress+1+(i+1)] = respondValue[i];
+			_packet[7+lengthCommunityName+1] = _packet[7+lengthCommunityName+1]+1;
+		}
+		_packet[1] = total_len-2;
+		_packet[7+lengthCommunityName+11+requestIDlength] = 6+oidLength+stringLength;
+		_packet[7+lengthCommunityName+13+requestIDlength] = 4+oidLength+stringLength;
+		arduAgent.send_response();
+}
 
-void arduAgentClass::generate_errorPDU(SNMP_ERR_CODES CODE){
+/**************************************************************************//**
+ * Function: generateErrorPDU
+ *
+ * Description:
+ * This function constructs an SNMP response packet based on the error code
+ * that is passed in. It also sends the resulting packet to the client.
+ * 
+ *
+ * Parameters: 
+ * SNMP_ERR_CODES CODE - The error code for which a response should be
+ *      generated.
+ *
+ * Returns:
+ *  None
+ *
+ *****************************************************************************/
+void arduAgentClass::generateErrorPDU(SNMP_ERR_CODES CODE){
 	int errorCodeLocation = 7+lengthCommunityName+6+requestIDlength;
 	if (CODE==SNMP_ERR_TOO_BIG)
 	{
@@ -204,12 +365,29 @@ void arduAgentClass::generate_errorPDU(SNMP_ERR_CODES CODE){
 	{
 		_packet[errorCodeLocation] = 0x05;
 	}
+	else if (CODE==SNMP_ERR_AUTHORIZATION_ERROR)
+	{
+		_packet[errorCodeLocation] = 0x10;
+	}
 	_packet[7+lengthCommunityName] = 0xa2;
 	Udp.beginPacket(Udp.remoteIP(), Udp.remotePort());
 	Udp.write(_packet, _packet[1]+2);
 	Udp.endPacket();
 }
 
+/**************************************************************************//**
+ * Function: getOID
+ *
+ * Description:
+ * This function returns the OID stored in private data.
+ *
+ * Parameters: 
+ * byte input[] - A string into which the OID will be copied
+ *
+ * Returns:
+ * None
+ *
+ *****************************************************************************/
 void arduAgentClass::getOID(byte input[]){
 	for (int i = 0; i < (int)oidLength; i++)
 	{
@@ -217,11 +395,43 @@ void arduAgentClass::getOID(byte input[]){
 	}
 }
 
+/**************************************************************************//**
+ * Function: getOIDlength
+ *
+ * Description:
+ * This function returns the length of the OID that was last received.
+ * (The one stored in private data)
+ *
+ * Parameters: 
+ * None
+ *
+ * Returns:
+ * int oidLength - The length of the OID in private data
+ *
+ *****************************************************************************/
 int arduAgentClass::getOIDlength(void){
 	return oidLength;
 }
 
-bool arduAgentClass::check_oid(const int inputoid[]){
+
+/**************************************************************************//**
+ * Function: checkOID
+ *
+ * Description:
+ * This function checks the OID in the received packet against the
+ * OID that's passed in as a null terminated string. This is used
+ * in the user's program to send the correct response based on the
+ * OID's they have defined.
+ *
+ * Parameters: 
+ * None
+ *
+ * Returns:
+ * false - OID didn't match
+ * true - OID matched
+ *
+ *****************************************************************************/
+bool arduAgentClass::checkOID(const int inputoid[]){
 	for(int i = 2; i < oidLength; i++)
 	{
 		if(inputoid[i] != oid[i-1])
@@ -232,6 +442,20 @@ bool arduAgentClass::check_oid(const int inputoid[]){
 	return true;
 }
 
+/**************************************************************************//**
+ * Function: send_response
+ *
+ * Description:
+ * This function transmits whatever is in _packet.
+ *
+ * Parameters: 
+ * None
+ *
+ * Returns:
+ * SNMP_API_CODES SNMP_API_STAT_SUCCESS - No error (sent)
+ * SNMP_API_CODES SNMP_API_STAT_PACKET_INVALID - bad packet (not sent)
+ *
+ *****************************************************************************/
 SNMP_API_STAT_CODES arduAgentClass::send_response(void){
 	if(!Udp.beginPacket(Udp.remoteIP(), Udp.remotePort()))
 	{
@@ -242,6 +466,20 @@ SNMP_API_STAT_CODES arduAgentClass::send_response(void){
 	return SNMP_API_STAT_SUCCESS;
 }
 
+/**************************************************************************//**
+ * Function: print_packet
+ *
+ * Description:
+ * This function is for debugging. It prints the received packet to a
+ * serial port.
+ *
+ * Parameters: 
+ * None
+ *
+ * Returns:
+ * None
+ *
+ *****************************************************************************/
 void arduAgentClass::print_packet(void){
 	    for(int i =0; i < 50; i++)
         {
@@ -251,6 +489,20 @@ void arduAgentClass::print_packet(void){
 	
 }
 
+/**************************************************************************//**
+ * Function: generalAuthenticator
+ *
+ * Description:
+ * This function verifies the appropriate community name by calling 
+ * authenticateGetCommunity or authenticateSetCommunity.
+ *
+ * Parameters: 
+ * None
+ *
+ * Returns:
+ * SNMP_ERR_CODES authd - The error code from authentication functions
+ *
+ *****************************************************************************/
 SNMP_ERR_CODES arduAgentClass::generalAuthenticator(void){
 	SNMP_ERR_CODES authd = SNMP_ERR_NO_ERROR;
 	if (request[0] == 0xa0)
@@ -263,6 +515,24 @@ SNMP_ERR_CODES arduAgentClass::generalAuthenticator(void){
 	return authd;
 }
 
+/**************************************************************************//**
+ * Function: authenticateGetCommunity
+ *
+ * Description:
+ * This function verifies that the GET community name in the received packet
+ * matches the specified community names passed into begin(), or the 
+ * defaults if no parameters were passed to begin().
+ *
+ * Parameters: 
+ * None
+ *
+ * Returns:
+ * SNMP_ERR_CODES SNMP_ERR_NO_ERROR if GET community matches
+ * SNMP_ERR_CODES SNMP_ERR_AUTHORIZATION_ERROR if SNMPv2c  and 
+ *		GET community doesn't match
+ * SNMP_ERR_CODES SNMP_ERR_NO_SUCH_NAME if SNMPv1 and GET community is wrong
+ *
+ *****************************************************************************/
 SNMP_ERR_CODES arduAgentClass::authenticateGetCommunity(void){
 
 	for (unsigned short int i=0;i<lengthCommunityName;i++)
@@ -282,6 +552,24 @@ SNMP_ERR_CODES arduAgentClass::authenticateGetCommunity(void){
 	return SNMP_ERR_NO_ERROR;
 }
 
+/**************************************************************************//**
+ * Function: authenticateSetCommunity
+ *
+ * Description:
+ * This function verifies that the SET community name in the received packet
+ * matches the specified community names passed into begin(), or the 
+ * defaults if no parameters were passed to begin().
+ *
+ * Parameters: 
+ * None
+ *
+ * Returns:
+ * SNMP_ERR_CODES SNMP_ERR_NO_ERROR if SET community matches
+ * SNMP_ERR_CODES SNMP_ERR_AUTHORIZATION_ERROR if SNMPv2c  and 
+ *		SET community doesn't match
+ * SNMP_ERR_CODES SNMP_ERR_NO_SUCH_NAME if SNMPv1 and SET community is wrong
+ *
+ *****************************************************************************/
 SNMP_ERR_CODES arduAgentClass::authenticateSetCommunity(void){
 
 	for (unsigned short int i=0;i<lengthCommunityName;i++)
@@ -301,10 +589,6 @@ SNMP_ERR_CODES arduAgentClass::authenticateSetCommunity(void){
 	return SNMP_ERR_NO_ERROR;
 }
 
-//Need to finish
-SNMP_API_STAT_CODES snmpv2Interpreter(){
-	return SNMP_API_STAT_SUCCESS;
-}
 	
 // Create one global object
 arduAgentClass arduAgent;

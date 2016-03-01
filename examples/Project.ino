@@ -1,6 +1,6 @@
 #include <Ethernet.h>
 #include <SPI.h>
-#include <atmelAgent.h>
+#include <arduAgent.h>
 
 static byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
 //static byte ip[] = { 151, 159, 18, 201 };
@@ -38,12 +38,12 @@ int hrUpTime[]      = {1,3,6,1,2,1,25,1,1,0};
 // .iso.org.dod.internet.private.enterprises.arduino (.1.3.6.1.4.1.36582)
 //
 // RFC1213 local values
-static char locDescr[]              = "This is a description";// read-only (static)
-static uint32_t locUpTime           = 0;                                        // read-only (static)
-static char locContact[20]          = "Adrian";                     
-static char locName[20]             = "arduAgent";                              
-static char locLocation[20]         = "USA";                         
-static int32_t locServices          = 6;      // read-only (static)
+  static char locDescr[]              = "Description";// read-only (static)
+  static uint32_t locUpTime           = 0;                                        // read-only (static)
+  static char locContact[20]          = "User";
+  static char locName[20]             = "arduAgent";
+  static char locLocation[20]         = "CENG447";
+  static int32_t locServices          = 6;      // read-only (static)
 
 
 uint32_t prevMillis = millis();
@@ -53,32 +53,31 @@ SNMP_ERR_CODES status;
 
 void pduReceived()
 {
-  int temperature_integer = 0;
-  byte receivedOID[100] = {0x00};
-  bool sent = false;
-  api_status = atmelAgent.requestPdu();
+  api_status = arduAgent.requestPdu();
   
   if (api_status == SNMP_API_STAT_SUCCESS)
   {
-   atmelAgent.getOID(receivedOID);
-  //Check defined OID's against received one here:
-     if(atmelAgent.check_oid(sysDescr)){
-      
-     }
-     else if(atmelAgent.check_oid(sysUpTime)){
-      atmelAgent.createResponsePDU(prevMillis/10);
-      sent = atmelAgent.send_response();
-     }else if(atmelAgent.check_oid(hrUpTime)){
-      atmelAgent.createResponsePDU(prevMillis/10);
-      sent = atmelAgent.send_response();
-     }else{
-      atmelAgent.generate_errorPDU();
-     }
- 
+    //Check defined OID's against received one here:
+    if(arduAgent.checkOID(sysDescr)){
+      arduAgent.createResponsePDU(locDescr);
+    }
+    else if(arduAgent.checkOID(sysUpTime)){
+      arduAgent.createResponsePDU(prevMillis/10);
+      }else if(arduAgent.checkOID(hrUpTime)){
+      arduAgent.createResponsePDU(prevMillis/10);
+      }else{
+      arduAgent.generateErrorPDU(SNMP_ERR_NO_SUCH_NAME);
+    }
+    
+  }
+  else if (api_status == SNMP_API_STAT_PACKET_INVALID)
+  {
+    arduAgent.generateErrorPDU(SNMP_ERR_GEN_ERROR);
   }
 }
 
-void setup(){
+void setup()
+{
   Serial.begin(9600);
 
   Ethernet.begin(mac);
@@ -93,14 +92,12 @@ void setup(){
 
 
   
-  api_status = atmelAgent.begin();
+  api_status = arduAgent.begin();
   //
   //Serial.println("agent has begun");
   if ( api_status == SNMP_API_STAT_SUCCESS ) {
-    atmelAgent.onPduReceive(pduReceived);
+    arduAgent.onPduReceive(pduReceived);
     
-    
-    //
     return;
   }
   
@@ -110,7 +107,7 @@ void setup(){
 
 void loop() {
   // listen/handle for incoming SNMP requests
-   atmelAgent.listen();
+   arduAgent.listen();
 
   if ( millis() - prevMillis > 1000 ) {
     // increment previous milliseconds on Uptime counter
@@ -120,3 +117,4 @@ void loop() {
     locUpTime += 100;
   }
 }
+

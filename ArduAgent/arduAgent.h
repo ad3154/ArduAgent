@@ -27,6 +27,7 @@
 #define SNMP_MAX_NAME_LEN	20
 #define SNMP_MAX_VALUE_LEN      64
 #define SNMP_MAX_PACKET_LEN     SNMP_MAX_VALUE_LEN + SNMP_MAX_OID_LEN + 25  //???
+#define SNMP_MAX_SET_LEN 20 //Arbitrary
 
 #include "Arduino.h"
 #include "Udp.h"
@@ -90,6 +91,11 @@ typedef enum SNMP_ERR_CODES {
 	SNMP_ERR_INCONSISTEN_NAME		= 18
 };
 
+typedef enum SNMP_REQUEST_TYPES {
+	SNMP_GET=0xa0,
+	SNMP_SET=0xa3
+};
+
 class arduAgentClass {
 public:
 	// Agent functions
@@ -101,7 +107,7 @@ public:
 	void onPduReceive(onPduReceiveCallback pduReceived);
 	void createResponsePDU(int respondValue);
 	void createResponsePDU(char respondValue[]);
-	SNMP_API_STAT_CODES snmpv2Interpreter();
+	SNMP_API_STAT_CODES set(int & reqValue);
 	
 	// Helper functions
 	bool checkOID( const int inputoid[]);
@@ -113,6 +119,8 @@ public:
 	SNMP_ERR_CODES authenticateGetCommunity(void);
 	SNMP_ERR_CODES authenticateSetCommunity(void);
 	SNMP_ERR_CODES generalAuthenticator(void);
+	SNMP_REQUEST_TYPES requestType(void);
+	
 
 private:
 	byte _packet[SNMP_MAX_PACKET_LEN];
@@ -141,7 +149,10 @@ private:
 	byte objectID;
 	byte oidLength;
 	short int oid[64] = {0x00};
-	byte nulValue[2];
+	int setValueInt =0;
+	char setValueChar[SNMP_MAX_SET_LEN] ={0}; //Size arbitrary
+	unsigned short int setLength = 0;
+	byte nulValue[2]={0x05,0x00};
 };
 
 extern arduAgentClass arduAgent;

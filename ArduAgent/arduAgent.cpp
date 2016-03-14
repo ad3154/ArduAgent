@@ -172,7 +172,7 @@ void arduAgentClass::onPduReceive(onPduReceiveCallback pduReceived){
  *****************************************************************************/
 SNMP_API_STAT_CODES arduAgentClass::requestPdu(){
 	SNMP_ERR_CODES authenticated = SNMP_ERR_NO_ERROR;
-	int errorStatusCodeBaseAddress;
+	unsigned short int errorStatusCodeBaseAddress;
 	_packetSize = Udp.available();
 	// reset packet array
 	for (int rstCounter=0; rstCounter < SNMP_MAX_PACKET_LEN; rstCounter++)
@@ -241,9 +241,25 @@ SNMP_API_STAT_CODES arduAgentClass::requestPdu(){
 	{
 		oid[i] = _packet[7+lengthCommunityName+16+i+requestIDlength];
 	}	
-
-	nulValue[0] = 0x05;
-	nulValue[1] = 0x00;
+	if (arduAgent.requestType() == SNMP_SET)
+	{
+		// Read in the value the client wants to set
+		//Serial.println("Set Command Detected");
+		if (_packet[7+lengthCommunityName+16+(int) oidLength+requestIDlength]==0x02){
+			setValueInt = _packet[9+lengthCommunityName+16+(int) oidLength+requestIDlength];
+		}
+		else if (_packet[7+lengthCommunityName+16+(int) oidLength+requestIDlength]==0x04){
+			int len=0;
+			len = _packet[8+lengthCommunityName+16+(int) oidLength+requestIDlength];
+			if (len > SNMP_MAX_SET_LEN){
+				return SNMP_API_STAT_PACKET_INVALID;
+			}
+			for(int i=0; i < len; i++)
+			{
+				setValueChar[i] = _packet[9+lengthCommunityName+16+(int) oidLength+requestIDlength+i];
+			}
+		}
+	}
 	authenticated = generalAuthenticator();
 	if(authenticated == SNMP_ERR_NO_ERROR)
 	{
@@ -275,20 +291,21 @@ SNMP_API_STAT_CODES arduAgentClass::requestPdu(){
 	int slsb = (respondValue >> (8*1)) & 0xff;
 	int smsb = (respondValue >> (8*2)) & 0xff;
 	int msb = (respondValue >> (8*3)) & 0xff;
-	int baseResponseAddress = 7+lengthCommunityName+16+oidLength+requestIDlength;
-	int total_len = 8+lengthCommunityName+16+oidLength+requestIDlength+5;
-	_packet[7+lengthCommunityName] = 0xa2;
-	_packet[baseResponseAddress] = 0x02;
-	_packet[baseResponseAddress+1] = 0x04;
+	unsigned int baseResponseAddress = 7+lengthCommunityName+16+oidLength+requestIDlength;
+	unsigned int total_len = 8+lengthCommunityName+16+oidLength+requestIDlength+5;
+	_packet[7+lengthCommunityName] = 0xa2;	//Response
+	_packet[baseResponseAddress] = 0x02;	//Integer
+	_packet[baseResponseAddress+1] = 0x04;	//Length
 	_packet[baseResponseAddress+2] = (uint8_t) msb;
 	_packet[baseResponseAddress+3] = (uint8_t) smsb;
 	_packet[baseResponseAddress+4] = (uint8_t) slsb;
 	_packet[baseResponseAddress+5] = (uint8_t) lsb;
-	_packet[1] = total_len-2;
+	_packet[1] = total_len-2;	//Null bytes not included in response
+	//Recalculate packet lengths:
 	_packet[7+lengthCommunityName+1] = _packet[7+lengthCommunityName+1]+4;
 	_packet[7+lengthCommunityName+11+requestIDlength] = 10+oidLength;
 	_packet[7+lengthCommunityName+13+requestIDlength] = 8+oidLength;
-	arduAgent.send_response();
+	arduAgent.send_response();	//Transmit the get response
 }
 
 /**************************************************************************//**
@@ -309,18 +326,20 @@ SNMP_API_STAT_CODES arduAgentClass::requestPdu(){
  *
  *****************************************************************************/
 void arduAgentClass::createResponsePDU(char respondValue[]){
-		int baseResponseAddress = 7+lengthCommunityName+16+oidLength+requestIDlength;
-		int stringLength = strlen(respondValue);
-		int total_len = 8+lengthCommunityName+16+oidLength+requestIDlength+1;
-		_packet[7+lengthCommunityName] = 0xa2;
-		_packet[baseResponseAddress] = 0x04;
+		unsigned short int baseResponseAddress = 7+lengthCommunityName+16+oidLength+requestIDlength;
+		unsigned short int stringLength = strlen(respondValue);
+		unsigned short int total_len = 8+lengthCommunityName+16+oidLength+requestIDlength+1;
+		_packet[7+lengthCommunityName] = 0xa2;	//Response code
+		_packet[baseResponseAddress] = 0x04;	//Octet Stream Format
 		_packet[baseResponseAddress+1] = stringLength;
 		for (int i=0; i<stringLength;i++)
 		{
+			//Build response
 			total_len++;
 			_packet[baseResponseAddress+1+(i+1)] = respondValue[i];
 			_packet[7+lengthCommunityName+1] = _packet[7+lengthCommunityName+1]+1;
 		}
+		//Recalculate packet lengths
 		_packet[1] = total_len-2;
 		_packet[7+lengthCommunityName+11+requestIDlength] = 6+oidLength+stringLength;
 		_packet[7+lengthCommunityName+13+requestIDlength] = 4+oidLength+stringLength;
@@ -344,7 +363,7 @@ void arduAgentClass::createResponsePDU(char respondValue[]){
  *
  *****************************************************************************/
 void arduAgentClass::generateErrorPDU(SNMP_ERR_CODES CODE){
-	int errorCodeLocation = 7+lengthCommunityName+6+requestIDlength;
+	unsigned short int errorCodeLocation = 7+lengthCommunityName+6+requestIDlength;
 	if (CODE==SNMP_ERR_TOO_BIG)
 	{
 		_packet[errorCodeLocation] = 0x01;
@@ -370,9 +389,7 @@ void arduAgentClass::generateErrorPDU(SNMP_ERR_CODES CODE){
 		_packet[errorCodeLocation] = 0x10;
 	}
 	_packet[7+lengthCommunityName] = 0xa2;
-	Udp.beginPacket(Udp.remoteIP(), Udp.remotePort());
-	Udp.write(_packet, _packet[1]+2);
-	Udp.endPacket();
+	arduAgent.send_response();
 }
 
 /**************************************************************************//**
@@ -507,10 +524,11 @@ SNMP_ERR_CODES arduAgentClass::generalAuthenticator(void){
 	SNMP_ERR_CODES authd = SNMP_ERR_NO_ERROR;
 	if (request[0] == 0xa0)
 	{
+		// Request was a GET request - Call authenticator
 		authd = authenticateGetCommunity();
 	}
-	else
-	authd = authenticateSetCommunity();
+	else //Result was not a GET request. SET is the only other implemented type
+	authd = authenticateSetCommunity();//Call Authenticator
 	
 	return authd;
 }
@@ -583,10 +601,58 @@ SNMP_ERR_CODES arduAgentClass::authenticateSetCommunity(void){
 			}
 			// Otherwise, return SNMPv1 Error
 			else
-			return SNMP_ERR_NO_SUCH_NAME;
+			{
+				return SNMP_ERR_NO_SUCH_NAME;
+			}
 		}
 	}
 	return SNMP_ERR_NO_ERROR;
+}
+
+/**************************************************************************//**
+ * Function: requestType
+ *
+ * Description:
+ * This function returns the SNMP request code in the received PDU
+ *
+ * Parameters: 
+ * None
+ *
+ * Returns:
+ * SNMP_REQUEST TYPES SNMP_GET (0xa0) request was a GET
+ * SNMP_REQUEST TYPES SNMP_SET (0xa3) request was a SET
+ *****************************************************************************/
+SNMP_REQUEST_TYPES arduAgentClass::requestType(void){
+	if (request[0] == 0xa3){
+		//Request was a SET request
+		return SNMP_SET;
+	}
+	else return SNMP_GET;
+}
+
+/**************************************************************************//**
+ * Function: set (Integer)
+ *
+ * Description:
+ * This function sets the variable passed into it using the integer
+ * received over the network.
+ *
+ * Parameters: 
+ * int & reqValue - The user's program variable that they want set
+ *
+ * Returns:
+ * SNMP_API_STAT_CODES SNMP_API_STAT_SUCCESS - No error
+ * SNMP_API_STAT_CODES SNMP_API_STAT_PACKET_INVALID - Data type incorrect
+ *****************************************************************************/
+SNMP_API_STAT_CODES arduAgentClass::set(int & reqValue){
+	
+	if (_packet[7+lengthCommunityName+16+(int) oidLength+requestIDlength]==0x02)
+	{
+	reqValue = setValueInt;
+	createResponsePDU(reqValue);
+	return SNMP_API_STAT_SUCCESS;
+	}
+	else return SNMP_API_STAT_PACKET_INVALID;
 }
 
 	

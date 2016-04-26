@@ -70,6 +70,12 @@ void pduReceived()
 			arduAgent.createResponsePDU(prevMillis/10);
 			}else if(arduAgent.checkOID(hrUpTime)){
 			arduAgent.createResponsePDU(prevMillis/10);
+			}else if(arduAgent.checkOID(sysContact)){
+			arduAgent.createResponsePDU(locContact);
+			}else if(arduAgent.checkOID(sysLocation)){
+			arduAgent.createResponsePDU(locLocation);
+			}else if(arduAgent.checkOID(sysName)){
+			arduAgent.createResponsePDU(locName);
 			}else if(arduAgent.checkOID(exampleWritableVar)){
 			arduAgent.createResponsePDU(exampleWritable);
 			}else{
